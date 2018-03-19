@@ -20,8 +20,6 @@ program abap_kata_service_trip.
 
 *& Production Code - Exceptions
 
-
-
 class lcx_user_not_logged_in definition final inheriting from cx_static_check.
 endclass.
 
@@ -62,7 +60,7 @@ interface lif_trip_dao.
         returning value(rt_trips) type lcl_trip=>tt_trip.
 endinterface.
 
-class lcl_trip_service definition.
+class lcl_trip_service definition final.
   public section.
     methods:
       get_trips_by_user
@@ -204,7 +202,7 @@ endclass.
 
 *& Test Code
 
-class ltc_testdouble_test definition.
+class ltc_testdouble definition.
   public section.
     interfaces
       lif_trip_dao.
@@ -212,7 +210,7 @@ class ltc_testdouble_test definition.
       trip_by for lif_trip_dao~trip_by.
 endclass.
 
-class ltc_testdouble_test implementation.
+class ltc_testdouble implementation.
 
   method lif_trip_dao~trip_by.
      rt_trips = io_user->trips( ).
@@ -222,7 +220,6 @@ endclass.
 
 class ltc_trip_service_test definition
                             risk level harmless
-                            inheriting from lcl_trip_service
                             for testing.
   private section.
     data guest type ref to lcl_user.
@@ -255,7 +252,7 @@ class ltc_trip_dao_test definition final risk level harmless for testing.
       setup,
       create_mock_object.
     data:
-      mock_object type ref to ltc_testdouble_test,
+      mock_object type ref to ltc_testdouble,
       traveler type ref to lcl_user,
       to_china type ref to lcl_trip,
       to_usa type ref to lcl_trip.
@@ -265,7 +262,6 @@ class ltc_trip_dao_test implementation.
 
   method setup.
     "user factory class would not make code better=>it's not a java :)
-    "becouse of lack of arrays
     traveler = new lcl_user( ).
     to_china = new lcl_trip( ).
     to_usa = new lcl_trip( ).
@@ -276,7 +272,7 @@ class ltc_trip_dao_test implementation.
   endmethod.
 
   method create_mock_object.
-    mock_object = new ltc_testdouble_test( ).
+    mock_object = new ltc_testdouble( ).
   endmethod.
 
   method retrieving_user_trips.
@@ -297,7 +293,7 @@ class ltc_trip_service_test implementation.
     to_mannheim = new lcl_trip( ).
     to_kassel = new lcl_trip( ).
     "mock trip dao dependency
-    lcl_trip_dao=>get_instance( my_injected_depedency = new ltc_testdouble_test( ) ).
+    lcl_trip_dao=>get_instance( my_injected_depedency = new ltc_testdouble( ) ).
     clear trips.
   endmethod.
   "should throw_an_exception_when_
