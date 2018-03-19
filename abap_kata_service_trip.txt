@@ -1,0 +1,381 @@
+program abap_kata_service_trip.
+
+*&---------------------------------------------------------------------*
+*&   Trip Service Requirements Specification
+*&---------------------------------------------------------------------*
+*&
+*&  Imagine building a social networking website for travellers
+*&    - users need to be logged in to see the content
+*&    - users need to be a friend to see someone else's trips
+*&
+*&  You cannot change production code if not covered by tests
+*&    - basic refactorings are allowed, but only if needed to write tests
+*&
+*&  Start testing from shortest to deepest branch
+*&  Start refactoring from deepest to shortest branch
+*&
+*&  Give it a go, the starting point is the LTC_TRIP_SERVICE_TEST class
+
+
+
+*& Production Code - Exceptions
+
+
+
+class lcx_user_not_logged_in definition final inheriting from cx_static_check.
+endclass.
+
+class lcx_collaborator_call definition final inheriting from cx_dynamic_check.
+  public section.
+    methods:
+      constructor
+        importing iv_text type string,
+      get_text redefinition.
+  private section.
+    data mv_text type string.
+endclass.
+
+class lcx_collaborator_call implementation.
+  method constructor.
+    super->constructor( ).
+    mv_text = iv_text.
+  endmethod.
+  method get_text.
+    result = mv_text.
+  endmethod.
+endclass.
+
+
+*& Production Code - Trips
+class lcl_user definition deferred.
+
+class lcl_trip definition final.
+  public section.
+    types:
+      tt_trip type standard table of ref to lcl_trip with empty key.
+endclass.
+
+interface lif_trip_dao.
+    methods:
+      trip_by
+        importing io_user type ref to lcl_user
+        returning value(rt_trips) type lcl_trip=>tt_trip.
+endinterface.
+
+class lcl_trip_service definition.
+  public section.
+    methods:
+      get_trips_by_user
+        importing io_user        type ref to lcl_user
+                  io_logged_user type ref to lcl_user
+        returning value(rt_trips) type lcl_trip=>tt_trip
+        raising lcx_user_not_logged_in.
+endclass.
+
+
+class lcl_trip_dao definition final.
+  public section.
+    class-methods:
+      find_trips_by_user
+        importing io_user type ref to lcl_user
+        returning value(rt_trips) type lcl_trip=>tt_trip,
+      get_instance
+        importing my_injected_depedency type ref to lif_trip_dao optional
+        returning value(instance) type ref to lif_trip_dao.
+    interfaces
+      lif_trip_dao.
+    aliases
+      trip_by for lif_trip_dao~trip_by.
+   protected section.
+   private section.
+    class-data
+      my_dependency type ref to lif_trip_dao.
+endclass.
+
+class lcl_trip_dao implementation.
+  "this method is not being used anymore (refactored)
+  method find_trips_by_user.
+    raise exception type lcx_collaborator_call
+      exporting iv_text = |lcl_trip_dao should not be invoked during unit test|.
+  endmethod.
+
+  method trip_by.
+    raise exception type lcx_collaborator_call
+      exporting iv_text = |lcl_trip_dao should not be invoked during unit test|.
+  endmethod.
+
+  method get_instance.
+    if ( my_dependency is not bound ).
+      my_dependency = cond #( when my_injected_depedency is bound
+                              then my_injected_depedency
+                              else new lcl_trip_dao( ) ).
+    endif.
+    instance = my_dependency.
+  endmethod.
+endclass.
+
+
+*& Production Code - Users
+class lcl_user definition final.
+  public section.
+    types:
+      tt_user type standard table of ref to lcl_user with empty key.
+    methods:
+      add_friend
+        importing iv_user type ref to lcl_user,
+      add_trip
+        importing iv_trip type ref to lcl_trip,
+      friends
+        returning value(rt_users) type tt_user,
+      trips
+        returning value(rt_trips) type lcl_trip=>tt_trip,
+      is_friend_with
+            importing
+              io_user type ref to lcl_user
+            returning value(is_friend) type abap_bool.
+  private section.
+    data:
+      mt_trips   type lcl_trip=>tt_trip,
+      mt_friends type tt_user.
+endclass.
+
+class lcl_user_session definition final create private.
+  public section.
+    class-methods:
+      class_constructor,
+      instance
+        returning value(ro_value) type ref to lcl_user_session.
+    methods:
+      logged_user
+        returning value(ro_value) type ref to lcl_user.
+  private section.
+    class-data:
+      go_user_session type ref to lcl_user_session.
+endclass.
+
+class lcl_user implementation.
+  method add_friend.
+    append iv_user to mt_friends.
+  endmethod.
+  method add_trip.
+    append iv_trip to mt_trips.
+  endmethod.
+  method friends.
+    rt_users = mt_friends.
+  endmethod.
+  method trips.
+    rt_trips = mt_trips.
+  endmethod.
+
+  method is_friend_with.
+    read table me->mt_friends with key table_line = io_user transporting no fields.
+    is_friend = cond #( when ( sy-subrc = 0 ) then abap_true else abap_false ).
+  endmethod.
+
+endclass.
+
+class lcl_user_session implementation.
+  method class_constructor.
+    go_user_session = new #( ).
+  endmethod.
+  method instance.
+    ro_value = go_user_session.
+  endmethod.
+  method logged_user.
+    raise exception type lcx_collaborator_call
+      exporting iv_text = |lcl_user_session->logged_user() should not be called during unit test|.
+  endmethod.
+endclass.
+
+*& Production Code - To be tested and refactored
+class lcl_trip_service implementation.
+
+  method get_trips_by_user.
+
+    if ( io_logged_user is not bound ).
+      raise exception type lcx_user_not_logged_in.
+    endif.
+
+    rt_trips = cond #( when ( io_user->is_friend_with( io_logged_user ) = abap_true )
+                       then lcl_trip_dao=>get_instance( )->trip_by( io_user ) ).
+
+  endmethod.
+endclass.
+
+*& Test Code
+
+class ltc_testdouble_test definition.
+  public section.
+    interfaces
+      lif_trip_dao.
+    aliases
+      trip_by for lif_trip_dao~trip_by.
+endclass.
+
+class ltc_testdouble_test implementation.
+
+  method lif_trip_dao~trip_by.
+     rt_trips = io_user->trips( ).
+  endmethod.
+
+endclass.
+
+class ltc_trip_service_test definition
+                            risk level harmless
+                            inheriting from lcl_trip_service
+                            for testing.
+  private section.
+    data guest type ref to lcl_user.
+    data friend type ref to lcl_user.
+    data logged_in_user type ref to lcl_user.
+    data trips type lcl_trip=>tt_trip.
+    data another_user type ref to lcl_user.
+    data to_mannheim type ref to lcl_trip.
+    data to_kassel type ref to lcl_trip.
+
+    methods:
+      setup,
+      "should throw_an_exception_when_
+      user_is_not_logged_in for testing,
+      "should_not_return_any_trips_if_
+      users_are_not_friends for testing,
+      "should_return_friend_trips_when_
+      users_are_friends for testing.
+
+endclass.
+
+class ltc_trip_dao_test definition final risk level harmless for testing.
+
+  public section.
+    methods:
+    "should_
+    retrieving_user_trips for testing.
+  private section.
+    methods:
+      setup,
+      create_mock_object.
+    data:
+      mock_object type ref to ltc_testdouble_test,
+      traveler type ref to lcl_user,
+      to_china type ref to lcl_trip,
+      to_usa type ref to lcl_trip.
+endclass.
+
+class ltc_trip_dao_test implementation.
+
+  method setup.
+    "user factory class would not make code better=>it's not a java :)
+    "becouse of lack of arrays
+    traveler = new lcl_user( ).
+    to_china = new lcl_trip( ).
+    to_usa = new lcl_trip( ).
+    traveler->add_trip( to_china ).
+    traveler->add_trip( to_usa ).
+
+    create_mock_object( ).
+  endmethod.
+
+  method create_mock_object.
+    mock_object = new ltc_testdouble_test( ).
+  endmethod.
+
+  method retrieving_user_trips.
+    data amount_of_trips type i.
+    data(trips_by_user) = lcl_trip_dao=>get_instance( my_injected_depedency = mock_object )->trip_by( io_user = traveler ).
+    describe table trips_by_user lines amount_of_trips.
+    cl_abap_unit_assert=>assert_equals( msg = '4th test failed: no trips recieved' exp = 2 act = amount_of_trips ).
+  endmethod.
+endclass.
+
+class ltc_trip_service_test implementation.
+
+  "prepare for test mock objects
+  method setup.
+    friend = new lcl_user( ).
+    another_user = new lcl_user( ).
+    logged_in_user = new lcl_user( ).
+    to_mannheim = new lcl_trip( ).
+    to_kassel = new lcl_trip( ).
+    "mock trip dao dependency
+    lcl_trip_dao=>get_instance( my_injected_depedency = new ltc_testdouble_test( ) ).
+    clear trips.
+  endmethod.
+  "should throw_an_exception_when_
+  method user_is_not_logged_in.
+    data(ref_trip_service) = new lcl_trip_service( ).
+    try.
+        ref_trip_service->get_trips_by_user( io_user = another_user io_logged_user = guest ).
+      catch lcx_user_not_logged_in.
+        data(exception_occured) = abap_true.
+    endtry.
+
+    cl_abap_unit_assert=>assert_true(
+      exporting
+        act              = exception_occured
+        msg              = 'first test failed. User is not loggenIn=>exception' ).
+
+  endmethod.
+
+  "should_not_return_any_trips_if_
+  method users_are_not_friends.
+
+    data(ref_trip_service) = new lcl_trip_service( ).
+
+    friend->add_friend( another_user ).
+    friend->add_trip( to_mannheim ).
+
+    try.
+        ref_trip_service->get_trips_by_user(
+          exporting
+            io_user                = friend
+            io_logged_user         = logged_in_user
+          receiving
+            rt_trips               = trips ).
+      catch lcx_user_not_logged_in.
+        "should never happen
+        assert 1 = 0.
+    endtry.
+
+    describe table trips lines data(amount_of_trips).
+
+    cl_abap_unit_assert=>assert_equals( msg = 'second test failed. Users are not friends=>no trips'
+                                        exp = 0
+                                        act = amount_of_trips ).
+  endmethod.
+
+  "should_return_friend_trips_when_
+  method users_are_friends.
+    data(ref_trip_service) = new lcl_trip_service( ).
+
+    friend->add_friend( another_user ).
+    friend->add_friend( logged_in_user ).
+    friend->add_trip( to_mannheim ).
+    friend->add_trip( to_kassel ).
+
+    try.
+        ref_trip_service->get_trips_by_user(
+          exporting
+            io_user                = friend
+            io_logged_user         = logged_in_user
+          receiving
+            rt_trips               = trips ).
+      catch lcx_user_not_logged_in.
+        "should never happen
+        assert 1 = 0.
+    endtry.
+
+    describe table trips lines data(amount_of_trips).
+
+    cl_abap_unit_assert=>assert_equals( msg = 'second test failed. Users are not friends=>no trips'
+                                        exp = 2
+                                        act = amount_of_trips ).
+  endmethod.
+endclass.
+
+class ltc_user_test definition final risk level harmless for testing.
+
+endclass.
+
+class ltc_user_test implementation.
+
+endclass.
