@@ -1,4 +1,4 @@
-program ztest_71755_079.
+program abap_kata_service_trip.
 
 *&---------------------------------------------------------------------*
 *&   Trip Service Requirements Specification
@@ -19,6 +19,8 @@ program ztest_71755_079.
 
 
 *& Production Code - Exceptions
+
+
 
 class lcx_user_not_logged_in definition final inheriting from cx_static_check.
 endclass.
@@ -73,10 +75,7 @@ endclass.
 
 class lcl_trip_dao definition final.
   public section.
-    class-methods:
-      find_trips_by_user
-        importing io_user type ref to lcl_user
-        returning value(rt_trips) type lcl_trip=>tt_trip,
+    class-methods
       get_instance
         importing my_injected_depedency type ref to lif_trip_dao optional
         returning value(instance) type ref to lif_trip_dao.
@@ -91,11 +90,6 @@ class lcl_trip_dao definition final.
 endclass.
 
 class lcl_trip_dao implementation.
-  "this method is not being used anymore (refactored)
-  method find_trips_by_user.
-    raise exception type lcx_collaborator_call
-      exporting iv_text = |lcl_trip_dao should not be invoked during unit test|.
-  endmethod.
 
   method trip_by.
     raise exception type lcx_collaborator_call
